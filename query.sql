@@ -6,6 +6,4 @@ CREATE TABLE contatos (
 
 -- Exemplos de inserção para testes
 INSERT INTO contatos (nome, telefone) VALUES
-    ('João Silva', '5511999990001'),
-    ('Maria Souza', '5511999990002'),
-    ('Carlos Lima', '5511999990003');
+    ('João Monteiro', '5516997002506');
