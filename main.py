@@ -9,7 +9,6 @@ import sys
 
 import requests
 from dotenv import load_dotenv
-from supabase import create_client, Client
 
 # ---------------------------------------------------------------------------
 # Configuração de logging
@@ -52,22 +51,18 @@ def carregar_variaveis_ambiente() -> dict:
     return variaveis
 
 
-def conectar_supabase(url: str, key: str) -> Client:
-    """Cria e retorna o cliente Supabase."""
+def buscar_contatos(url: str, key: str, limite: int = MAX_CONTATOS) -> list[dict]:
+    """Busca até `limite` contatos na tabela 'contatos' via REST API do Supabase."""
     try:
-        cliente = create_client(url, key)
-        logger.info("Conexão com o Supabase estabelecida.")
-        return cliente
-    except Exception as erro:
-        logger.error("Falha ao conectar com o Supabase: %s", erro)
-        sys.exit(1)
+        endpoint = f"{url}/rest/v1/contatos?select=nome,telefone&limit={limite}"
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+        }
 
-
-def buscar_contatos(cliente: Client, limite: int = MAX_CONTATOS) -> list[dict]:
-    """Busca até `limite` contatos na tabela 'contatos'."""
-    try:
-        resposta = cliente.table("contatos").select("nome, telefone").limit(limite).execute()
-        contatos = resposta.data
+        resposta = requests.get(endpoint, headers=headers, timeout=30)
+        resposta.raise_for_status()
+        contatos = resposta.json()
 
         if not contatos:
             logger.warning("Nenhum contato encontrado no banco de dados.")
@@ -75,9 +70,11 @@ def buscar_contatos(cliente: Client, limite: int = MAX_CONTATOS) -> list[dict]:
 
         logger.info("Contatos encontrados: %d", len(contatos))
         return contatos
-    except Exception as erro:
+    except requests.exceptions.HTTPError as erro:
+        logger.error("Erro HTTP ao buscar contatos: %s - %s", erro, resposta.text)
+    except requests.exceptions.RequestException as erro:
         logger.error("Erro ao buscar contatos no Supabase: %s", erro)
-        return []
+    return []
 
 
 def montar_mensagem(nome: str) -> str:
@@ -133,16 +130,13 @@ def main() -> None:
     # 1. Carregar variáveis de ambiente
     env = carregar_variaveis_ambiente()
 
-    # 2. Conectar ao Supabase
-    cliente = conectar_supabase(env["SUPABASE_URL"], env["SUPABASE_KEY"])
-
-    # 3. Buscar contatos (máximo 3)
-    contatos = buscar_contatos(cliente)
+    # 2. Buscar contatos (máximo 3)
+    contatos = buscar_contatos(env["SUPABASE_URL"], env["SUPABASE_KEY"])
     if not contatos:
         logger.info("Processo encerrado — nenhum contato para enviar.")
         return
 
-    # 4. Enviar mensagens
+    # 3. Enviar mensagens
     enviados = 0
     for contato in contatos:
         nome = contato["nome"]
